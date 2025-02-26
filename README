@@ -1,3 +1,115 @@
+## Xiaomi Mipad 4.4 EGL bug patched webview
+### mocha only, arm only
+### This tree is for old lineage version replacement of android_external_chromium-webview
+
+based on https://github.com/LineageOS/android_external_chromium-webview_patches
+version: 132.0.6834.122
+min_sdk: 26 (Android 8.0+)
+
+
+按照指南
+https://chromium.googlesource.com/chromium/src/+/HEAD/docs/android_build_instructions.md
+
+
+先去一个地方clone，放depot tools
+
+之后的命令需要设置路径
+export PATH="$PATH:/path/to/depot_tools"
+
+
+去另一个地方新建文件夹放chromium源码
+mkdir chromium && cd chromium
+
+开始拉取（详情看android_build_instructions）
+fetch --nohooks android
+
+进入目录
+cd src
+
+(根据此文章，切换版本
+https://blog.csdn.net/WilliamVector/article/details/116136223
+)
+git checkout -b test132.0.6834.122 refs/tags/132.0.6834.122
+
+同步
+# gclient sync --with_branch_heads --with_tags (-D 选项可删除非相关的子模块)
+gclient sync --with_branch_heads --with_tags -D
+
+安装依赖
+./build/install-build-deps.sh
+
+执行
+gclient runhooks
+
+
+应用相应的patch
+git am /path/to/android_external_chromium-webview_patches/*.patch
+
+gn args out/Default
+
+这时终端可编辑，先把lineage的配置写入
+------
+
+The prebuilt libwebviewchromium.so included in these APKs is built from Chromium
+release tag 132.0.6834.122, using the GN build tool. To match our build settings, set:
+
+target_os = "android"
+is_debug = false
+is_official_build = true
+is_chrome_branded = false
+use_official_google_api_keys = false
+ffmpeg_branding = "Chrome"
+proprietary_codecs = true
+enable_resource_allowlist_generation = false
+enable_remoting = false
+is_component_build = false
+symbol_level = 0
+enable_nacl = false
+blink_symbol_level = 0
+webview_devui_show_icon = false
+dfmify_dev_ui = false
+disable_fieldtrial_testing_config = true
+android_default_version_name = "132.0.6834.122"
+android_default_version_code = "6834122$$"
+
+$$ depends on device ARCH
+(00=arm, 50=arm64, 10=x86, 60=x64)
+
+in your GN argument file before building.
+
+------
+
+再加上，防止构建终端
+target_cpu = "arm"
+fatal_linker_warnings = false
+treat_warnings_as_errors = false
+
+
+然后如果直接构建的话会缺icon，按照lineage的命令复制icon
+------
+Replace webview icon:
+
+From the chromium/src directory:
+
+mkdir -p android_webview/nonembedded/java/res_icon/drawable-xxxhdpi
+cp chrome/android/java/res_chromium_base/mipmap-mdpi/app_icon.png android_webview/nonembedded/java/res_icon/drawable-mdpi/icon_webview.png
+cp chrome/android/java/res_chromium_base/mipmap-hdpi/app_icon.png android_webview/nonembedded/java/res_icon/drawable-hdpi/icon_webview.png
+cp chrome/android/java/res_chromium_base/mipmap-xhdpi/app_icon.png android_webview/nonembedded/java/res_icon/drawable-xhdpi/icon_webview.png
+cp chrome/android/java/res_chromium_base/mipmap-xxhdpi/app_icon.png android_webview/nonembedded/java/res_icon/drawable-xxhdpi/icon_webview.png
+cp chrome/android/java/res_chromium_base/mipmap-xxxhdpi/app_icon.png android_webview/nonembedded/java/res_icon/drawable-xxxhdpi/icon_webview.png
+
+------
+
+python pip安装依赖protobuf==3.19 google google-cloud
+
+然后执行
+autoninja -C out/Default system_webview_apk
+
+
+
+
+Original
+--------------------------------------------------------------------------------
 Building the Chromium-based WebView in AOSP is no longer supported. WebView can
 now be built entirely from the Chromium source code.
 
@@ -6,91 +118,3 @@ https://www.chromium.org/developers/how-tos/build-instructions-android-webview
 
 ------
 
-ARM/ARM64
-
-The prebuilt libwebviewchromium.so included in these APKs is built from Chromium
-release tag 100.0.4896.127, using the GN build tool. To match our build settings, set:
-
-target_os = "android"
-is_debug = false
-is_official_build = true
-is_chrome_branded = false
-use_official_google_api_keys = false
-ffmpeg_branding = "Chrome"
-proprietary_codecs = true
-enable_resource_allowlist_generation = false
-enable_remoting = false
-is_component_build = false
-symbol_level = 0
-enable_nacl = false
-blink_symbol_level = 0
-webview_devui_show_icon = false
-dfmify_dev_ui = false
-disable_autofill_assistant_dfm = true
-disable_tab_ui_dfm = true
-enable_gvr_services = false
-disable_fieldtrial_testing_config = true
-android_default_version_name = "100.0.4896.127"
-android_default_version_code = "4896127$$"
-
-$$ depends on device ARCH
-(00=arm, 50=arm64, 10=x86, 60=x64)
-
-in your GN argument file before building.
-
-------
-
-X86/X86_64
-
-The prebuilt libwebviewchromium.so included in these APKs is built from Chromium
-release tag 93.0.4577.82, using the GN build tool. To match our build settings, set:
-
-target_os = "android"
-is_debug = false
-is_official_build = true
-is_chrome_branded = false
-use_official_google_api_keys = false
-ffmpeg_branding = "Chrome"
-proprietary_codecs = true
-enable_resource_allowlist_generation = false
-enable_remoting = false
-is_component_build = false
-symbol_level = 0
-enable_nacl = false
-blink_symbol_level = 0
-webview_devui_show_icon = false
-dfmify_dev_ui = false
-disable_autofill_assistant_dfm = true
-disable_tab_ui_dfm = true
-enable_gvr_services = false
-fieldtrial_testing_like_official_build = true
-android_default_version_name = "93.0.4577.82"
-android_default_version_code = "4577082$$"
-
-$$ depends on device ARCH
-(00=arm, 50=arm64, 10=x86, 60=x64)
-
-in your GN argument file before building.
-
-------
-
-Replace webview icon:
-
-From the chromium/src directory:
-
-mkdir -p android_webview/apk/java/res/drawable-xxxhdpi
-cp chrome/android/java/res_chromium/mipmap-mdpi/app_icon.png android_webview/apk/java/res/drawable-mdpi/icon_webview.png
-cp chrome/android/java/res_chromium/mipmap-hdpi/app_icon.png android_webview/apk/java/res/drawable-hdpi/icon_webview.png
-cp chrome/android/java/res_chromium/mipmap-xhdpi/app_icon.png android_webview/apk/java/res/drawable-xhdpi/icon_webview.png
-cp chrome/android/java/res_chromium/mipmap-xxhdpi/app_icon.png android_webview/apk/java/res/drawable-xxhdpi/icon_webview.png
-cp chrome/android/java/res_chromium/mipmap-xxxhdpi/app_icon.png android_webview/apk/java/res/drawable-xxxhdpi/icon_webview.png
-
-------
-
-Extra patches:
-patches/chromium-theme-color.patch: Provides a callback when a theme color is set by the page
-
-------
-
-For questions about building WebView, please see
-https://groups.google.com/a/chromium.org/forum/#!forum/android-webview-dev

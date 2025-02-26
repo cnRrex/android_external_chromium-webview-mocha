@@ -1,0 +1,111 @@
+diff --git a/gpu/command_buffer/service/feature_info.cc b/gpu/command_buffer/service/feature_info.cc
+index bc98e7216f7f0..6aaef1160c40a 100644
+--- a/gpu/command_buffer/service/feature_info.cc
++++ b/gpu/command_buffer/service/feature_info.cc
+@@ -1506,6 +1506,12 @@ void FeatureInfo::InitializeFeatures() {
+     validators_.dst_blend_factor.AddValue(GL_ONE_MINUS_SRC1_ALPHA_EXT);
+     validators_.g_l_state.AddValue(GL_MAX_DUAL_SOURCE_DRAW_BUFFERS_EXT);
+   }
++  
++#if !BUILDFLAG(IS_MAC)
++   if (workarounds_.ignore_egl_sync_failures) {
++    gl::GLFenceEGL::SetIgnoreFailures();
++  }
++#endif
+ 
+   feature_flags_.angle_robust_client_memory =
+       gfx::HasExtension(extensions, "GL_ANGLE_robust_client_memory");
+diff --git a/gpu/config/gpu_driver_bug_list.json b/gpu/config/gpu_driver_bug_list.json
+index cccdcd6a5f011..8065b3e345735 100644
+--- a/gpu/config/gpu_driver_bug_list.json
++++ b/gpu/config/gpu_driver_bug_list.json
+@@ -1295,6 +1295,19 @@
+         "rely_on_implicit_sync_for_swap_buffers"
+       ]
+     },
++    {
++      "id": 236,
++      "description": "MiPad Nvidia drivers g_ignore_egl_sync_failures work around",
++      "cr_bugs": [123456],
++      "gl_vendor": "NVIDIA.*",
++      "machine_model_name": ["MI PAD", "Project Tango Tablet Development Kit"],
++      "os": {
++        "type": "android"
++      },
++      "features": [
++         "ignore_egl_sync_failures"
++       ]
++    },
+     {
+       "id": 240,
+       "cr_bugs": [750306, 764526],
+diff --git a/gpu/config/gpu_workaround_list.txt b/gpu/config/gpu_workaround_list.txt
+index ae5536a9cdbcb..ea13eeacae0d8 100644
+--- a/gpu/config/gpu_workaround_list.txt
++++ b/gpu/config/gpu_workaround_list.txt
+@@ -87,6 +87,7 @@ force_nv12_overlay_support
+ force_rgb10a2_overlay_support
+ force_update_scissor_state_when_binding_fbo0
+ gl_clear_broken
++ignore_egl_sync_failures
+ init_gl_position_in_vertex_shader
+ limit_d3d11_video_decoder_to_11_0
+ max_3d_array_texture_size_1024
+diff --git a/ui/gl/gl_fence_egl.cc b/ui/gl/gl_fence_egl.cc
+index 6dabff3be92f4..6662b4034cbfb 100644
+--- a/ui/gl/gl_fence_egl.cc
++++ b/ui/gl/gl_fence_egl.cc
+@@ -17,8 +17,14 @@ namespace gl {
+ namespace {
+ bool g_check_egl_fence_before_wait = false;
+ bool g_flush_before_create_fence = false;
++bool g_ignore_egl_sync_failures = false;
+ }  // namespace
+ 
++// static
++void GLFenceEGL::SetIgnoreFailures() {
++  g_ignore_egl_sync_failures = true;
++}
++
+ GLFenceEGL::GLFenceEGL() = default;
+ 
+ // static
+@@ -85,7 +91,7 @@ bool GLFenceEGL::HasCompleted() {
+ 
+ void GLFenceEGL::ClientWait() {
+   EGLint result = ClientWaitWithTimeoutNanos(EGL_FOREVER_KHR);
+-  DCHECK_NE(EGL_TIMEOUT_EXPIRED_KHR, result);
++  DCHECK(g_ignore_egl_sync_failures || EGL_TIMEOUT_EXPIRED_KHR != result);
+ }
+ 
+ EGLint GLFenceEGL::ClientWaitWithTimeoutNanos(EGLTimeKHR timeout) {
+@@ -94,7 +100,7 @@ EGLint GLFenceEGL::ClientWaitWithTimeoutNanos(EGLTimeKHR timeout) {
+   if (result == EGL_FALSE) {
+     LOG(ERROR) << "Failed to wait for EGLSync. error:"
+                << ui::GetLastEGLErrorString();
+-    CHECK(false);
++    CHECK(g_ignore_egl_sync_failures);
+   }
+   return result;
+ }
+@@ -118,7 +124,7 @@ void GLFenceEGL::ServerWait() {
+   if (!completed && eglWaitSyncKHR(display_, sync_, flags) == EGL_FALSE) {
+     LOG(ERROR) << "Failed to wait for EGLSync. error:"
+                << ui::GetLastEGLErrorString();
+-    CHECK(false);
++    CHECK(g_ignore_egl_sync_failures);
+   }
+ }
+ 
+diff --git a/ui/gl/gl_fence_egl.h b/ui/gl/gl_fence_egl.h
+index ae74cc9cdf502..13854ca851b4c 100644
+--- a/ui/gl/gl_fence_egl.h
++++ b/ui/gl/gl_fence_egl.h
+@@ -13,6 +13,7 @@ namespace gl {
+ 
+ class GL_EXPORT GLFenceEGL : public GLFence {
+  public:
++  static void SetIgnoreFailures();
+   GLFenceEGL(const GLFenceEGL&) = delete;
+   GLFenceEGL& operator=(const GLFenceEGL&) = delete;
+ 
